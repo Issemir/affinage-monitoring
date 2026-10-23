@@ -57,3 +57,4 @@ dkms.conf
 # Monitoring stack secrets and local runtime files
 deployment/.env
 secrets/
+.vscode
