@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Affinage dashboards
+    orgId: 1
+    folder: Affinage
+    type: file
+    disableDeletion: true
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
