@@ -34,7 +34,7 @@ services:
       retries: 12
 
   telegraf:
-    image: telegraf:1
+    image: telegraf:1.40
     restart: unless-stopped
     environment:
       MQTT_USERNAME: ${MQTT_USERNAME:-telegraf}
