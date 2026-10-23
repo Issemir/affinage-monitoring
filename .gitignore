@@ -53,3 +53,7 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Monitoring stack secrets and local runtime files
+deployment/.env
+secrets/
