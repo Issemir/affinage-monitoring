@@ -1,113 +1,143 @@
-
+#include <Arduino.h>
 #include <Wire.h>
 #include <ESP8266WiFi.h>
-#include <PubSubClient.h>
-#include <Adafruit_SHT31.h>
+#include <time.h>
+
 #include "secrets.h"
+#include "sensor.h"
+#include "storage.h"
+#include "buffer.h"
+#include "mqtt.h"
 
-
-// Wi-Fi
+// Wi-Fi credentials remain in your existing secrets.h.
 const char* WIFI_SSID = SECRET_WIFI_SSID;
 const char* WIFI_PASSWORD = SECRET_WIFI_PASSWORD;
 
-// MQTT
-const char* MQTT_SERVER = SECRET_MQTT_SERVER;
-const int MQTT_PORT = SECRET_MQTT_PORT;
-const char* MQTT_USER = SECRET_MQTT_USER;
-const char* MQTT_PASSWORD = SECRET_MQTT_PASSWORD;
-const char* MQTT_TOPIC = SECRET_MQTT_TOPIC;
+const uint32_t WIFI_RETRY_INTERVAL_MS = 15000;
+
+Sensor sensor;
+Storage storage;
+ReadingBuffer buffer(storage);
 
 WiFiClient wifiClient;
-PubSubClient mqtt(wifiClient);
-Adafruit_SHT31 sht31 = Adafruit_SHT31();
+PubSubClient mqttClient(wifiClient);
+MqttTransport transport(mqttClient, buffer);
 
-unsigned long lastPublish = 0;
-const unsigned long PUBLISH_INTERVAL = 30000;
+uint32_t lastSampleMs = 0;
+uint32_t lastWifiAttemptMs = 0;
 
-void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) return;
-
-  Serial.print("Connecting to Wi-Fi...");
+void startWiFi() {
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println();
-  Serial.print("Wi-Fi connected. IP: ");
-  Serial.println(WiFi.localIP());
-}
-
-void connectMQTT() {
-  while (!mqtt.connected()) {
-    Serial.print("Connecting to MQTT...");
-
-    String clientId = "affinage-nodemcu-" +
-                      String(ESP.getChipId(), HEX);
-
-    if (mqtt.connect(clientId.c_str(), MQTT_USER,
-                     MQTT_PASSWORD)) {
-      Serial.println("connected");
-    } else {
-      Serial.print("failed, state=");
-      Serial.println(mqtt.state());
-      delay(5000);
-    }
-  }
+  lastWifiAttemptMs = millis();
+  Serial.println(F("Connecting to Wi-Fi..."));
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(1500);
+  delay(1000);
 
-  Wire.begin(4, 5); // SDA = D2, SCL = D1
+  Serial.println();
+  Serial.println(F("=== Affinage Monitor ==="));
 
-  if (!sht31.begin(0x44)) {
-    Serial.println("ERROR: SHT31-D not detected");
+  // SHT31: SDA = D2/GPIO4, SCL = D1/GPIO5.
+  Wire.begin(4, 5);
+
+  if (!sensor.begin()) {
+    Serial.println(F("ERROR: SHT31 sensor not detected"));
     while (true) delay(1000);
   }
 
-  mqtt.setServer(MQTT_SERVER, MQTT_PORT);
+  Serial.println(F("SHT31 sensor initialised"));
 
-  connectWiFi();
-  connectMQTT();
+  if (!storage.begin()) {
+    Serial.println(F("ERROR: LittleFS initialisation failed"));
+    while (true) delay(1000);
+  }
+
+  buffer.begin();
+
+  Serial.printf("Storage free: %u bytes\n", storage.freeBytes());
+  Serial.printf("Queued readings: %u\n", buffer.queued());
+
+  mqttClient.setServer(SECRET_MQTT_SERVER, SECRET_MQTT_PORT);
+  mqttClient.setBufferSize(256);
+
+  transport.begin(
+    SECRET_MQTT_USER,
+    SECRET_MQTT_PASSWORD,
+    SECRET_MQTT_TOPIC
+  );
+
+  // UTC timestamps; Grafana can handle local-time presentation.
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+
+  startWiFi();
+
+  Serial.println(F("Initialisation complete"));
 }
 
 void loop() {
+  uint32_t now = millis();
+
+  // Reconnect Wi-Fi periodically without blocking the sampling loop.
   if (WiFi.status() != WL_CONNECTED) {
-    connectWiFi();
-  }
-
-  if (!mqtt.connected()) {
-    connectMQTT();
-  }
-
-  mqtt.loop();
-
-  if (millis() - lastPublish >= PUBLISH_INTERVAL) {
-    lastPublish = millis();
-
-    float temperature = sht31.readTemperature();
-    float humidity = sht31.readHumidity();
-
-    if (isnan(temperature) || isnan(humidity)) {http://chalky:8086/?utm_source=chatgpt.com
-      Serial.println("ERROR: Failed to read sensor");
-      return;
+    if (now - lastWifiAttemptMs >= WIFI_RETRY_INTERVAL_MS) {
+      startWiFi();
     }
+  } else {
+    transport.loop();
+  }
 
-    char payload[128];
-    snprintf(payload, sizeof(payload),
-             "{\"temperature\":%.2f,\"humidity\":%.2f}",
-             temperature, humidity);
+  // The sampling interval increases as the storage queue fills.
+  const uint32_t sampleInterval = buffer.samplingIntervalMs();
 
-    if (mqtt.publish(MQTT_TOPIC, payload)) {
-      Serial.print("Published: ");
-      Serial.println(payload);
+  if (now - lastSampleMs >= sampleInterval) {
+    lastSampleMs = now;
+
+    float temperature;
+    float humidity;
+
+    if (sensor.read(temperature, humidity)) {
+      const time_t systemTime = time(nullptr);
+      const bool ntpAvailable = systemTime > 1700000000;
+
+      bool timestampEstimated = false;
+
+      const uint32_t timestamp = buffer.nextTimestamp(
+        ntpAvailable ? static_cast<uint32_t>(systemTime) : 0,
+        timestampEstimated,
+        sampleInterval / 1000
+      );
+
+      Reading reading;
+      reading.timestamp = timestamp;
+      reading.temperature = temperature;
+      reading.humidity = humidity;
+      reading.timestampEstimated = timestampEstimated;
+
+      if (buffer.enqueue(reading)) {
+        Serial.printf(
+          "Queued: %lu | %.2f C | %.2f%% RH%s\n",
+          static_cast<unsigned long>(timestamp),
+          temperature,
+          humidity,
+          timestampEstimated ? " | ESTIMATED TIME" : ""
+        );
+      } else {
+        Serial.println(F("ERROR: Failed to save reading"));
+      }
     } else {
-      Serial.println("MQTT publish failed");
+      Serial.println(F("ERROR: Failed to read SHT31"));
     }
   }
+
+  // Keep MQTT responsive.
+  if (WiFi.status() == WL_CONNECTED) {
+    transport.loop();
+  }
+
+  yield();
 }
