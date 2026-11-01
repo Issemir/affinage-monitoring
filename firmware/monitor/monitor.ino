@@ -3,16 +3,14 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <Adafruit_SHT31.h>
+#include "secrets.h"
 
-// Wi-Fi settings
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
-// Chalky: MQTT broker
-const char* MQTT_SERVER = "192.168.0.252";
-const int MQTT_PORT = 1883;
-const char* MQTT_USER = "YOUR_MQTT_USERNAME";
-const char* MQTT_PASSWORD = "YOUR_MQTT_PASSWORD";
+const char* WIFI_SSID = SECRET_WIFI_SSID;
+const char* WIFI_PASSWORD = SECRET_WIFI_PASSWORD;
+
+const char* MQTT_USER = SECRET_MQTT_USER;
+const char* MQTT_PASSWORD = SECRET_MQTT_PASSWORD;
 
 // Match the topic subscribed to by Telegraf
 const char* MQTT_TOPIC = "affinage-fridge/measurements/nodemcu";
