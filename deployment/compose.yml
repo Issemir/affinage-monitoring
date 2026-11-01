@@ -35,8 +35,8 @@ services:
       timeout: 5s
       retries: 12
 
-  telegraf:
-    image: telegraf:1.40
+  acknowledger:
+    build: ./acknowledger
     restart: unless-stopped
     environment:
       MQTT_USERNAME: ${MQTT_USERNAME:-telegraf}
@@ -44,8 +44,6 @@ services:
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?Set INFLUXDB_TOKEN}
       INFLUXDB_ORG: ${INFLUXDB_ORG:-affinage}
       INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-fridge}
-    volumes:
-      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
     depends_on:
       influxdb:
         condition: service_healthy
@@ -76,7 +74,6 @@ services:
         condition: service_healthy
     networks:
       - monitoring
-
 
 networks:
   monitoring:
