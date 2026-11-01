@@ -68,6 +68,11 @@ def on_message(client, userdata, msg):
         temperature = float(payload["temperature"])
         humidity = float(payload["humidity"])
 
+        timestamp_estimated = payload.get("timestamp_estimated", False)
+
+        if not isinstance(timestamp_estimated, bool):
+            raise ValueError("timestamp_estimated must be a boolean")
+
         if not reading_id or timestamp <= 0:
             raise ValueError("Invalid reading ID or timestamp")
 
@@ -82,6 +87,7 @@ def on_message(client, userdata, msg):
             .tag("topic", msg.topic)
             .field("temperature", temperature)
             .field("humidity", humidity)
+            .field("timestamp_estimated", timestamp_estimated)
             .time(timestamp, WritePrecision.S)
         )
 
