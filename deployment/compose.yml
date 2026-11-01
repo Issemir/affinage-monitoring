@@ -14,6 +14,8 @@ services:
 
   influxdb:
     image: influxdb:2.7
+    ports:
+      - "8086:8086"
     restart: unless-stopped
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
