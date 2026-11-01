@@ -93,7 +93,7 @@ void loop() {
     float temperature = sht31.readTemperature();
     float humidity = sht31.readHumidity();
 
-    if (isnan(temperature) || isnan(humidity)) {
+    if (isnan(temperature) || isnan(humidity)) {http://chalky:8086/?utm_source=chatgpt.com
       Serial.println("ERROR: Failed to read sensor");
       return;
     }
