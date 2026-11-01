@@ -1,12 +1,47 @@
 
 #include <Wire.h>
 #include <Adafruit_SHT31.h>
+#include <LittleFS.h>
 
 Adafruit_SHT31 sht31 = Adafruit_SHT31();
 
 void setup() {
   Serial.begin(115200);
   delay(1500);
+
+  Serial.println();
+  Serial.println("=== NodeMCU Storage Diagnostic ===");
+
+  // Flash information
+  Serial.printf("Flash chip ID: 0x%06X\n", ESP.getFlashChipId());
+  Serial.printf("Flash chip size: %u bytes\n", ESP.getFlashChipRealSize());
+  Serial.printf("Flash configured size: %u bytes\n", ESP.getFlashChipSize());
+
+  // Heap information
+  Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
+
+  // LittleFS information
+  Serial.println();
+  Serial.println("Initialising LittleFS...");
+
+  if (!LittleFS.begin()) {
+    Serial.println("ERROR: LittleFS initialisation failed");
+    return;
+  }
+
+  Serial.println("LittleFS mounted successfully");
+
+  FSInfo fsInfo;
+
+  if (LittleFS.info(fsInfo)) {
+    Serial.printf("Filesystem total: %u bytes\n", fsInfo.totalBytes);
+    Serial.printf("Filesystem used: %u bytes\n", fsInfo.usedBytes);
+    Serial.printf("Filesystem free: %u bytes\n",
+                  fsInfo.totalBytes - fsInfo.usedBytes);
+  }
+
+  Serial.println();
+  Serial.println("=== Diagnostic Complete ===");
 
   Serial.println();
   Serial.println("=== SHT31-D Sensor Diagnostic ===");
