@@ -6,14 +6,16 @@
 #include "secrets.h"
 
 
+// Wi-Fi
 const char* WIFI_SSID = SECRET_WIFI_SSID;
 const char* WIFI_PASSWORD = SECRET_WIFI_PASSWORD;
 
+// MQTT
+const char* MQTT_SERVER = SECRET_MQTT_SERVER;
+const int MQTT_PORT = SECRET_MQTT_PORT;
 const char* MQTT_USER = SECRET_MQTT_USER;
 const char* MQTT_PASSWORD = SECRET_MQTT_PASSWORD;
-
-// Match the topic subscribed to by Telegraf
-const char* MQTT_TOPIC = "affinage-fridge/measurements/nodemcu";
+const char* MQTT_TOPIC = SECRET_MQTT_TOPIC;
 
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
